@@ -1,0 +1,13 @@
+explicacion de idea para taller
+
+Una aplicación web donde los usuarios registran sus autos modificados (tuning), detallan sus mejoras (mods) y el sistema estima los HP (caballos de fuerza) en base a esas modificaciones.
+Además, permite comparar autos entre usuarios.
+
+
+Permitir a los usuarios:
+
+-Registrar sus autos
+-Añadir modificaciones (turbo, ECU, escape, etc.)
+-Calcular HP estimados automáticamente
+-Comparar autos con otros usuarios
+-Ver rankings (opcional)
