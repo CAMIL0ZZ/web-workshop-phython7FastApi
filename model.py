@@ -26,3 +26,18 @@ class Modification(BaseModel):
     category: str
     part_name: str
     price: float
+
+
+##___________"manipulacion csv"_________________
+
+def read_csv(file):
+    if not os.path.exists(file):
+        return []
+    with open(file, newline='', encoding='utf-8') as f:
+        return list(csv.DictReader(f))
+
+def write_csv(file, data, fieldnames):
+    with open(file, "w", newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(data)
