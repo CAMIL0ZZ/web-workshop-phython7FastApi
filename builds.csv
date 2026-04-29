@@ -1,8 +1,2 @@
-{
-  "id": 1,
-  "owner_id": 1,
-  "brand": "Nissan",
-  "model": "Silvia S15",
-  "year": 2000,
-  "hp": 350
-}
+id,owner_id,brand,model,year,hp
+1,1,nissan,180sx,1995,185

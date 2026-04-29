@@ -71,6 +71,20 @@ def delete_user(user_id: int):
     write_csv("users.csv", new_users, ["id", "username", "email"])
     return {"msg": "User deleted"}
 
+
+@app.get("/users/search/")
+def search_users(username: str = None, email: str = None):
+    users = read_csv("users.csv")
+
+    results = []
+    for u in users:
+        if username and username.lower() in u["username"].lower():
+            results.append(u)
+        elif email and email.lower() in u["email"].lower():
+            results.append(u)
+
+    return results
+
 ##_____________"crud bulds"_________________
 
 
@@ -100,6 +114,26 @@ def delete_build(build_id: int):
     write_csv("builds.csv", new_builds, ["id", "owner_id", "brand", "model", "year", "hp"])
     return {"msg": "Build deleted"}
 
+@app.get("/builds/search/")
+def search_builds(brand: str = None, model: str = None):
+    builds = read_csv("builds.csv")
+
+    return [
+        b for b in builds
+        if (brand and brand.lower() in b["brand"].lower()) or
+           (model and model.lower() in b["model"].lower())
+    ]
+
+@app.get("/mods/search/")
+def search_mods(category: str = None, part_name: str = None):
+    mods = read_csv("mods.csv")
+
+    return [
+        m for m in mods
+        if (category and category.lower() in m["category"].lower()) or
+           (part_name and part_name.lower() in m["part_name"].lower())
+    ]
+
 ##_______________crud mods autos_______________
 
 @app.post("/mods/")
@@ -112,6 +146,7 @@ def create_mod(mod: Modification):
 @app.get("/mods/")
 def get_mods():
     return read_csv("mods.csv")
+
 
 @app.get("/mods/{mod_id}")
 def get_mod(mod_id: int):
