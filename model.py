@@ -100,4 +100,30 @@ def delete_build(build_id: int):
     write_csv("builds.csv", new_builds, ["id", "owner_id", "brand", "model", "year", "hp"])
     return {"msg": "Build deleted"}
 
+##_______________crud mods autos_______________
 
+@app.post("/mods/")
+def create_mod(mod: Modification):
+    mods = read_csv("mods.csv")
+    mods.append(mod.dict())
+    write_csv("mods.csv", mods, mod.dict().keys())
+    return mod
+
+@app.get("/mods/")
+def get_mods():
+    return read_csv("mods.csv")
+
+@app.get("/mods/{mod_id}")
+def get_mod(mod_id: int):
+    mods = read_csv("mods.csv")
+    for m in mods:
+        if int(m["id"]) == mod_id:
+            return m
+    raise HTTPException(404, "Mod not found")
+
+@app.delete("/mods/{mod_id}")
+def delete_mod(mod_id: int):
+    mods = read_csv("mods.csv")
+    new_mods = [m for m in mods if int(m["id"]) != mod_id]
+    write_csv("mods.csv", new_mods, ["id", "car_id", "category", "part_name", "price"])
+    return {"msg": "Mod deleted"}
