@@ -70,3 +70,34 @@ def delete_user(user_id: int):
     new_users = [u for u in users if int(u["id"]) != user_id]
     write_csv("users.csv", new_users, ["id", "username", "email"])
     return {"msg": "User deleted"}
+
+##_____________"crud bulds"_________________
+
+
+@app.post("/builds/")
+def create_build(build: CarBuild):
+    builds = read_csv("builds.csv")
+    builds.append(build.dict())
+    write_csv("builds.csv", builds, build.dict().keys())
+    return build
+
+@app.get("/builds/")
+def get_builds():
+    return read_csv("builds.csv")
+
+@app.get("/builds/{build_id}")
+def get_build(build_id: int):
+    builds = read_csv("builds.csv")
+    for b in builds:
+        if int(b["id"]) == build_id:
+            return b
+    raise HTTPException(404, "Build not found")
+
+@app.delete("/builds/{build_id}")
+def delete_build(build_id: int):
+    builds = read_csv("builds.csv")
+    new_builds = [b for b in builds if int(b["id"]) != build_id]
+    write_csv("builds.csv", new_builds, ["id", "owner_id", "brand", "model", "year", "hp"])
+    return {"msg": "Build deleted"}
+
+
