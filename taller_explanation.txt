@@ -11,3 +11,28 @@ Permitir a los usuarios:
 -Calcular HP estimados automáticamente
 -Comparar autos con otros usuarios
 -Ver rankings (opcional)
+
+
+ENDPOINTS DE USUARIOS
+
+POST /users/ → Crear usuario
+GET /users/ → Listar usuarios
+GET /users/{user_id} → Obtener usuario específico
+DELETE /users/{user_id} → Eliminar usuario
+
+
+ENDPOINTS DE BUILDS (AUTOS)
+
+
+POST /builds/ → Crear auto
+GET /builds/ → Listar autos
+GET /builds/{build_id} → Obtener auto
+DELETE /builds/{build_id} → Eliminar auto
+
+ENDPOINTS DE MODIFICACIONES
+
+POST /mods/ → Crear modificación
+GET /mods/ → Listar modificaciones
+GET /mods/{mod_id} → Obtener modificación
+DELETE /mods/{mod_id} → Eliminar modificación
+
