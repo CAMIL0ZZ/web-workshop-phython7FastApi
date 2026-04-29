@@ -41,3 +41,32 @@ def write_csv(file, data, fieldnames):
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(data)
+
+##____________"crud user"_______________________
+
+
+@app.post("/users/")
+def create_user(user: User):
+    users = read_csv("users.csv")
+    users.append(user.dict())
+    write_csv("users.csv", users, user.dict().keys())
+    return user
+
+@app.get("/users/")
+def get_users():
+    return read_csv("users.csv")
+
+@app.get("/users/{user_id}")
+def get_user(user_id: int):
+    users = read_csv("users.csv")
+    for u in users:
+        if int(u["id"]) == user_id:
+            return u
+    raise HTTPException(404, "User not found")
+
+@app.delete("/users/{user_id}")
+def delete_user(user_id: int):
+    users = read_csv("users.csv")
+    new_users = [u for u in users if int(u["id"]) != user_id]
+    write_csv("users.csv", new_users, ["id", "username", "email"])
+    return {"msg": "User deleted"}
