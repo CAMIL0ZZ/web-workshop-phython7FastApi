@@ -1,164 +1,244 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List
-import csv
 import os
+from typing import List, Optional
+from fastapi import FastAPI, HTTPException, Depends
+from pydantic import BaseModel
+from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
+from dotenv import load_load_env
 
-app = FastAPI()
+# Cargar variables de entorno
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
 
+if not DATABASE_URL:
+    raise ValueError("Falta la variable de entorno DATABASE_URL")
 
-class User(BaseModel):
-    id: int
+# Configuración de SQLAlchemy para Neon (PostgreSQL)
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+app = FastAPI(title="Car Builds API con Neon DB")
+
+# -------------------------------------------------------------
+# MODELOS DE BASE DE DATOS (SQLAlchemy)
+# -------------------------------------------------------------
+
+class UserModel(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+
+class CarBuildModel(Base):
+    __tablename__ = "car_builds"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    brand = Column(String, index=True, nullable=False)
+    model = Column(String, index=True, nullable=False)
+    year = Column(Integer, nullable=False)
+    hp = Column(Integer, nullable=False)
+
+class ModificationModel(Base):
+    __tablename__ = "modifications"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    car_id = Column(Integer, ForeignKey("car_builds.id", ondelete="CASCADE"), nullable=False)
+    category = Column(String, index=True, nullable=False)
+    part_name = Column(String, index=True, nullable=False)
+    price = Column(Float, nullable=False)
+
+# Crear las tablas en Neon si no existen
+Base.metadata.create_all(bind=engine)
+
+# -------------------------------------------------------------
+# ESQUEMAS DE VALIDACIÓN (Pydantic)
+# -------------------------------------------------------------
+# Nota: Quitamos el 'id' en la creación (Create) porque Neon lo auto-incrementa.
+
+class UserCreate(BaseModel):
     username: str
     email: str
 
-class CarBuild(BaseModel):
+class UserResponse(BaseModel):
     id: int
+    username: str
+    email: str
+    class Config:
+        from_attributes = True
+
+class CarBuildCreate(BaseModel):
     owner_id: int
     brand: str
     model: str
     year: int
     hp: int
 
-class Modification(BaseModel):
+class CarBuildResponse(BaseModel):
     id: int
+    owner_id: int
+    brand: str
+    model: str
+    year: int
+    hp: int
+    class Config:
+        from_attributes = True
+
+class ModificationCreate(BaseModel):
     car_id: int
     category: str
     part_name: str
     price: float
 
+class ModificationResponse(BaseModel):
+    id: int
+    car_id: int
+    category: str
+    part_name: str
+    price: float
+    class Config:
+        from_attributes = True
 
-##___________"manipulacion csv"_________________
+# -------------------------------------------------------------
+# DEPENDENCIA PARA LA CONEXIÓN A LA DB
+# -------------------------------------------------------------
 
-def read_csv(file):
-    if not os.path.exists(file):
-        return []
-    with open(file, newline='', encoding='utf-8') as f:
-        return list(csv.DictReader(f))
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-def write_csv(file, data, fieldnames):
-    with open(file, "w", newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(data)
+# -------------------------------------------------------------
+# CRUD: USERS
+# -------------------------------------------------------------
 
-##____________"crud user"_______________________
+@app.post("/users/", response_model=UserResponse)
+def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    db_user = UserModel(username=user.username, email=user.email)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
 
+@app.get("/users/", response_model=List[UserResponse])
+def get_users(db: Session = Depends(get_db)):
+    return db.query(UserModel).all()
 
-@app.post("/users/")
-def create_user(user: User):
-    users = read_csv("users.csv")
-    users.append(user.dict())
-    write_csv("users.csv", users, user.dict().keys())
+@app.get("/users/search/", response_model=List[UserResponse])
+def search_users(username: Optional[str] = None, email: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(UserModel)
+    if username:
+        query = query.filter(UserModel.username.ilike(f"%{username}%"))
+    if email:
+        query = query.filter(UserModel.email.ilike(f"%{email}%"))
+    return query.all()
+
+@app.get("/users/{user_id}", response_model=UserResponse)
+def get_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(UserModel).filter(UserModel.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     return user
 
-@app.get("/users/")
-def get_users():
-    return read_csv("users.csv")
-
-@app.get("/users/{user_id}")
-def get_user(user_id: int):
-    users = read_csv("users.csv")
-    for u in users:
-        if int(u["id"]) == user_id:
-            return u
-    raise HTTPException(404, "User not found")
-
 @app.delete("/users/{user_id}")
-def delete_user(user_id: int):
-    users = read_csv("users.csv")
-    new_users = [u for u in users if int(u["id"]) != user_id]
-    write_csv("users.csv", new_users, ["id", "username", "email"])
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(UserModel).filter(UserModel.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.delete(user)
+    db.commit()
     return {"msg": "User deleted"}
 
+# -------------------------------------------------------------
+# CRUD: CAR BUILDS
+# -------------------------------------------------------------
 
-@app.get("/users/search/")
-def search_users(username: str = None, email: str = None):
-    users = read_csv("users.csv")
+@app.post("/builds/", response_model=CarBuildResponse)
+def create_build(build: CarBuildCreate, db: Session = Depends(get_db)):
+    # Opcional: Validar si el owner_id existe
+    owner_exists = db.query(UserModel).filter(UserModel.id == build.owner_id).first()
+    if not owner_exists:
+        raise HTTPException(status_code=400, detail="Owner ID does not exist")
+        
+    db_build = CarBuildModel(**build.dict())
+    db.add(db_build)
+    db.commit()
+    db.refresh(db_build)
+    return db_build
 
-    results = []
-    for u in users:
-        if username and username.lower() in u["username"].lower():
-            results.append(u)
-        elif email and email.lower() in u["email"].lower():
-            results.append(u)
+@app.get("/builds/", response_model=List[CarBuildResponse])
+def get_builds(db: Session = Depends(get_db)):
+    return db.query(CarBuildModel).all()
 
-    return results
+@app.get("/builds/search/", response_model=List[CarBuildResponse])
+def search_builds(brand: Optional[str] = None, model: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(CarBuildModel)
+    if brand:
+        query = query.filter(CarBuildModel.brand.ilike(f"%{brand}%"))
+    if model:
+        query = query.filter(CarBuildModel.model.ilike(f"%{model}%"))
+    return query.all()
 
-##_____________"crud bulds"_________________
-
-
-@app.post("/builds/")
-def create_build(build: CarBuild):
-    builds = read_csv("builds.csv")
-    builds.append(build.dict())
-    write_csv("builds.csv", builds, build.dict().keys())
+@app.get("/builds/{build_id}", response_model=CarBuildResponse)
+def get_build(build_id: int, db: Session = Depends(get_db)):
+    build = db.query(CarBuildModel).filter(CarBuildModel.id == build_id).first()
+    if not build:
+        raise HTTPException(status_code=404, detail="Build not found")
     return build
 
-@app.get("/builds/")
-def get_builds():
-    return read_csv("builds.csv")
-
-@app.get("/builds/{build_id}")
-def get_build(build_id: int):
-    builds = read_csv("builds.csv")
-    for b in builds:
-        if int(b["id"]) == build_id:
-            return b
-    raise HTTPException(404, "Build not found")
-
 @app.delete("/builds/{build_id}")
-def delete_build(build_id: int):
-    builds = read_csv("builds.csv")
-    new_builds = [b for b in builds if int(b["id"]) != build_id]
-    write_csv("builds.csv", new_builds, ["id", "owner_id", "brand", "model", "year", "hp"])
+def delete_build(build_id: int, db: Session = Depends(get_db)):
+    build = db.query(CarBuildModel).filter(CarBuildModel.id == build_id).first()
+    if not build:
+        raise HTTPException(status_code=404, detail="Build not found")
+    db.delete(build)
+    db.commit()
     return {"msg": "Build deleted"}
 
-@app.get("/builds/search/")
-def search_builds(brand: str = None, model: str = None):
-    builds = read_csv("builds.csv")
+# -------------------------------------------------------------
+# CRUD: MODIFICATIONS
+# -------------------------------------------------------------
 
-    return [
-        b for b in builds
-        if (brand and brand.lower() in b["brand"].lower()) or
-           (model and model.lower() in b["model"].lower())
-    ]
+@app.post("/mods/", response_model=ModificationResponse)
+def create_mod(mod: ModificationCreate, db: Session = Depends(get_db)):
+    # Opcional: Validar si el car_id existe
+    car_exists = db.query(CarBuildModel).filter(CarBuildModel.id == mod.car_id).first()
+    if not car_exists:
+        raise HTTPException(status_code=400, detail="Car Build ID does not exist")
 
-@app.get("/mods/search/")
-def search_mods(category: str = None, part_name: str = None):
-    mods = read_csv("mods.csv")
+    db_mod = ModificationModel(**mod.dict())
+    db.add(db_mod)
+    db.commit()
+    db.refresh(db_mod)
+    return db_mod
 
-    return [
-        m for m in mods
-        if (category and category.lower() in m["category"].lower()) or
-           (part_name and part_name.lower() in m["part_name"].lower())
-    ]
+@app.get("/mods/", response_model=List[ModificationResponse])
+def get_mods(db: Session = Depends(get_db)):
+    return db.query(ModificationModel).all()
 
-##_______________crud mods autos_______________
+@app.get("/mods/search/", response_model=List[ModificationResponse])
+def search_mods(category: Optional[str] = None, part_name: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(ModificationModel)
+    if category:
+        query = query.filter(ModificationModel.category.ilike(f"%{category}%"))
+    if part_name:
+        query = query.filter(ModificationModel.part_name.ilike(f"%{part_name}%"))
+    return query.all()
 
-@app.post("/mods/")
-def create_mod(mod: Modification):
-    mods = read_csv("mods.csv")
-    mods.append(mod.dict())
-    write_csv("mods.csv", mods, mod.dict().keys())
+@app.get("/mods/{mod_id}", response_model=ModificationResponse)
+def get_mod(mod_id: int, db: Session = Depends(get_db)):
+    mod = db.query(ModificationModel).filter(ModificationModel.id == mod_id).first()
+    if not mod:
+        raise HTTPException(status_code=404, detail="Mod not found")
     return mod
 
-@app.get("/mods/")
-def get_mods():
-    return read_csv("mods.csv")
-
-
-@app.get("/mods/{mod_id}")
-def get_mod(mod_id: int):
-    mods = read_csv("mods.csv")
-    for m in mods:
-        if int(m["id"]) == mod_id:
-            return m
-    raise HTTPException(404, "Mod not found")
-
 @app.delete("/mods/{mod_id}")
-def delete_mod(mod_id: int):
-    mods = read_csv("mods.csv")
-    new_mods = [m for m in mods if int(m["id"]) != mod_id]
-    write_csv("mods.csv", new_mods, ["id", "car_id", "category", "part_name", "price"])
+def delete_mod(mod_id: int, db: Session = Depends(get_db)):
+    mod = db.query(ModificationModel).filter(ModificationModel.id == mod_id).first()
+    if not mod:
+        raise HTTPException(status_code=404, detail="Mod not found")
+    db.delete(mod)
+    db.commit()
     return {"msg": "Mod deleted"}
